@@ -18,6 +18,7 @@ urlpatterns = [
     path("api/v1/auth/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("api/v1/auth/logout/", LogoutView.as_view(), name="token_logout"),
     path("api/v1/usuarios/", include("apps.usuarios.urls")),
-    # Los endpoints de los demás módulos (materia prima, producción, etc.) se agregan
-    # a partir de Fase 6 en adelante, con sus permisos y serializers por rol.
+    path("api/v1/materia-prima/", include("apps.materia_prima.urls")),
+    # Los endpoints de los demás módulos (producción, ventas, etc.) se agregan
+    # a partir de Fase 7 en adelante, con sus permisos y serializers por rol.
 ]
