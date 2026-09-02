@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 from django.conf import settings
+from django.core.validators import MinValueValidator
 from django.db import models
 
 from apps.materia_prima.models import MateriaPrima, MovimientoInventarioMateriaPrima
@@ -21,6 +22,23 @@ class Producto(models.Model):
 
     def __str__(self):
         return self.nombre
+
+
+class Paquete(models.Model):
+    """Venta por paquete (sección 18): p. ej. 20 unidades = 1 paquete de champurradas."""
+
+    producto = models.ForeignKey(Producto, on_delete=models.CASCADE, related_name="paquetes")
+    nombre = models.CharField(max_length=100)
+    unidades_por_paquete = models.PositiveIntegerField(validators=[MinValueValidator(1)])
+    precio_paquete = models.DecimalField(max_digits=10, decimal_places=2)
+    activo = models.BooleanField(default=True)
+
+    class Meta:
+        unique_together = ("producto", "nombre")
+        ordering = ["producto__nombre", "nombre"]
+
+    def __str__(self):
+        return f"{self.nombre} ({self.unidades_por_paquete} de {self.producto.nombre})"
 
 
 class MovimientoInventarioProductoTerminado(models.Model):

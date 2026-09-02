@@ -3,6 +3,7 @@ from django.contrib import admin
 from .models import (
     ConsumoMateriaPrima,
     MovimientoInventarioProductoTerminado,
+    Paquete,
     Producto,
     Produccion,
 )
@@ -13,6 +14,12 @@ class ProductoAdmin(admin.ModelAdmin):
     list_display = ("nombre", "precio_unitario", "stock_actual", "activo")
     search_fields = ("nombre",)
     list_filter = ("activo",)
+
+
+@admin.register(Paquete)
+class PaqueteAdmin(admin.ModelAdmin):
+    list_display = ("nombre", "producto", "unidades_por_paquete", "precio_paquete", "activo")
+    search_fields = ("nombre", "producto__nombre")
 
 
 class ConsumoMateriaPrimaInline(admin.TabularInline):

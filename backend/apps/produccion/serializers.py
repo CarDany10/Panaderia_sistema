@@ -3,7 +3,19 @@ from decimal import Decimal
 from rest_framework import serializers
 
 from . import services
-from .models import ConsumoMateriaPrima, MovimientoInventarioProductoTerminado, Producto, Produccion
+from .models import (
+    ConsumoMateriaPrima,
+    MovimientoInventarioProductoTerminado,
+    Paquete,
+    Producto,
+    Produccion,
+)
+
+
+class PaqueteSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Paquete
+        fields = ["id", "producto", "nombre", "unidades_por_paquete", "precio_paquete", "activo"]
 
 
 class ProductoAdminSerializer(serializers.ModelSerializer):

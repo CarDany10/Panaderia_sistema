@@ -6,17 +6,28 @@ from apps.usuarios.models import Usuario
 from apps.usuarios.permissions import EsAdministrador, EsTrabajador
 
 from . import services
-from .models import Producto, Produccion
+from .models import Paquete, Producto, Produccion
 from .serializers import (
     AjusteProductoTerminadoSerializer,
     MermaProductoTerminadoSerializer,
     MovimientoInventarioProductoTerminadoSerializer,
+    PaqueteSerializer,
     ProduccionAdminSerializer,
     ProduccionCrearSerializer,
     ProduccionTrabajadorSerializer,
     ProductoAdminSerializer,
     ProductoTrabajadorSerializer,
 )
+
+
+class PaqueteViewSet(viewsets.ModelViewSet):
+    """Configuración de venta por paquete de un producto. Exclusivo de Administrador
+    en esta fase; se expone lectura pública/de cliente al construir Pedidos (Fase 10)."""
+
+    queryset = Paquete.objects.select_related("producto").all()
+    serializer_class = PaqueteSerializer
+    permission_classes = [EsAdministrador]
+    http_method_names = ["get", "post", "patch", "head", "options"]
 
 
 class ProductoViewSet(viewsets.ModelViewSet):
