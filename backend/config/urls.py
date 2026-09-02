@@ -26,4 +26,5 @@ urlpatterns = [
     path("api/v1/notificaciones/", include("apps.notificaciones.urls")),
     path("api/v1/historial/", include("apps.historial.urls")),
     path("api/v1/dashboard/", include("apps.dashboard.urls")),
+    path("api/v1/odoo/", include("apps.odoo_integration.urls")),
 ]

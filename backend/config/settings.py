@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     "apps.notificaciones",
     "apps.historial",
     "apps.dashboard",
+    "apps.odoo_integration",
 ]
 
 MIDDLEWARE = [
@@ -151,3 +152,15 @@ SECURE_SSL_REDIRECT = config("SECURE_SSL_REDIRECT", default=not DEBUG, cast=bool
 # con Google hasta que el administrador conecte la integración.
 GOOGLE_CALENDAR_CREDENTIALS_JSON = config("GOOGLE_CALENDAR_CREDENTIALS_JSON", default="")
 GOOGLE_CALENDAR_ID = config("GOOGLE_CALENDAR_ID", default="")
+
+# --- Odoo (opcional: conector contable, ver docs/01-ANALISIS_Y_ARQUITECTURA.md 3.4) ---
+# El sistema opera 100% sin esto; solo es necesario si se conecta una Odoo real
+# para contabilidad/facturación fiscal formal. ODOO_JOURNAL_ID_* son específicos
+# de cada instalación de Odoo (diario contable de ventas/compras) — los define
+# quien administre esa Odoo, no se pueden adivinar desde aquí.
+ODOO_URL = config("ODOO_URL", default="")
+ODOO_DB = config("ODOO_DB", default="")
+ODOO_USERNAME = config("ODOO_USERNAME", default="")
+ODOO_API_KEY = config("ODOO_API_KEY", default="")
+ODOO_JOURNAL_ID_VENTAS = config("ODOO_JOURNAL_ID_VENTAS", default="")
+ODOO_JOURNAL_ID_COMPRAS = config("ODOO_JOURNAL_ID_COMPRAS", default="")
