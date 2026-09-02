@@ -1,7 +1,7 @@
 # Sistema de Administración para Panadería — Análisis y Arquitectura
 
-**Estado:** Fase 1–3 (Análisis de requerimientos, Arquitectura técnica, Diseño de base de datos)
-**Pendiente:** Aprobación del cliente antes de iniciar Fase 4 (código de implementación).
+**Estado:** Fase 1–3 aprobadas por el cliente (Análisis de requerimientos, Arquitectura técnica, Diseño de base de datos). Webflow confirmado como interfaz de todo el sistema.
+**Siguiente:** Fase 4 (Configuración del proyecto Django + DRF).
 
 ---
 
@@ -10,7 +10,7 @@
 | Pregunta | Decisión | Resumen |
 |---|---|---|
 | ¿Odoo o Django como núcleo? | **Django + DRF + PostgreSQL** (Opción C, con Odoo como integración opcional futura, no como núcleo) | Odoo no cubre con precisión las reglas de negocio exactas que pides (lb/oz, mermas, paquetes, visibilidad por rol muy granular) sin una capa de personalización tan grande que termina siendo, en la práctica, reescribir un backend a medida dentro de Odoo. Además Namecheap no ofrece el entorno de servidor que Odoo necesita. |
-| ¿Webflow como interfaz completa del sistema? | **No para el panel interno.** Sí como opción para páginas públicas/mercadeo. | Webflow es una herramienta de diseño de sitios, no un framework de aplicación con estado, tablas de datos dinámicas, RBAC por campo, ni SPA. Meter todo el ERP dentro de Webflow + API introduce fragilidad y no es lo que usan sistemas empresariales reales. Te explico la alternativa abajo (sección 8). |
+| ¿Webflow como interfaz completa del sistema? | **Sí — decisión confirmada por el cliente.** Webflow será la interfaz para TODO el sistema (panel interno de Admin/Trabajador/Repartidor y cara pública de Cliente), consumiendo 100% vía API DRF. | Se acepta el riesgo señalado (Webflow no valida nada en servidor): la contrapartida obligatoria es que Django **nunca envíe al navegador un dato que el rol no debe ver**, ni siquiera oculto por CSS/JS — ver sección 3.5 (actualizada) y sección 4. |
 | ¿Google Calendar? | **Sí**, vía API oficial, con credenciales server-side (nunca en el frontend). | Encaja de forma limpia como servicio adicional del backend Django. |
 | ¿Namecheap soporta todo esto? | **Parcial.** Django/PostgreSQL sí (con matices). Odoo no. | Ver sección 10. |
 
@@ -93,43 +93,48 @@ Ventajas:
 **No forma parte del MVP.** Se documenta como integración futura opcional:
 Django (fuente de verdad operativa) → API de Odoo (XML-RPC) → Odoo Contabilidad (solo si más adelante se requiere facturación fiscal formal). Esto es Fase 14, y es "puede omitirse sin romper nada" — el sistema es 100% funcional sin ella.
 
-### 3.5 Rol de Webflow (hallazgo importante — necesita tu decisión)
+### 3.5 Rol de Webflow (DECISIÓN CONFIRMADA: Webflow para todo el sistema)
 
-Pediste explícitamente que evalúe esto con honestidad, así que aquí está sin adornos:
+Se planteó como hallazgo de riesgo y el cliente confirmó explícitamente: **Webflow será la interfaz de TODO el sistema**, incluyendo el panel interno de Administrador, Trabajador de producción y Repartidor, no solo la cara pública del Cliente. Se acepta.
 
-**Webflow no es apto como interfaz completa de un ERP interno con 4 roles, tablas de datos dinámicas, formularios con validación cruzada de inventario, y RBAC a nivel de campo.** Webflow es una herramienta de diseño de sitios (CMS + maquetación visual) pensada para páginas de marketing, no para SPAs con estado complejo, tablas editables, ni protección de rutas por rol a nivel de UI granular. Puedes conectarlo a una API (como pides), pero para lograr un panel interno real terminarías escribiendo, a mano, con JavaScript personalizado dentro de Webflow, el equivalente a un framework de frontend — perdiendo justo la ventaja de "diseño visual sin código" que buscas en Webflow, y con mucha fragilidad para mantenimiento futuro.
+Esto cambia el rol de Django: **Django deja de servir cualquier HTML/template propio para el uso diario del sistema** (salvo el Django Admin, que se mantiene solo como panel técnico de emergencia para el desarrollador, no para los usuarios finales). Django pasa a ser **100% un backend API (DRF)**, y Webflow consume esa API para las 4 vistas por rol.
 
-**Recomendación (para tu aprobación):**
-- **Panel interno** (Dashboard, Materia Prima, Producción, Ventas, Pedidos, Historial, etc., para Administrador/Trabajador/Repartidor): construir con **Django templates + Bootstrap 5 + JS moderno (vanilla o Alpine.js)**, sirviendo directamente desde el backend. Esto es lo que usan sistemas empresariales reales similares (más rápido, más seguro, permisos consistentes en una sola capa), y sigue tu paleta blanco/beige/café tal como la definiste.
-- **Webflow** se reserva para lo que sí hace excelente: la **cara pública para el Cliente** (catálogo de productos, landing, "Iniciar sesión"/"Crear pedido") consumiendo la API de Django — esto es exactamente tu "Opción A" pero aplicada solo a la porción pública, no al ERP interno completo.
-- Si prefieres insistir en Webflow para todo el sistema (incluyendo el panel del Administrador), lo puedo hacer, pero quiero que la decisión sea explícita tuya porque implica más riesgo de mantenimiento y peor cumplimiento de "seguridad en backend, no en frontend" (regla #30), ya que Webflow no valida nada en servidor.
+**Implicación de seguridad que se vuelve innegociable** (y que ya estaba en la regla #30, pero ahora es la única línea de defensa): Webflow, al ser una herramienta de maquetación que compila a HTML/CSS/JS estático servido al navegador, **no puede validar ni ocultar nada del lado servidor**. Cualquier persona puede abrir las herramientas de desarrollador del navegador e inspeccionar cada respuesta JSON que Django envía. Por lo tanto:
 
-**Necesito tu confirmación sobre este punto antes de Fase 13** (no bloquea Fases 4–12, que son 100% backend). Si no dices nada, procederé con la recomendación (Django templates para el panel interno, Webflow opcional para la cara pública del cliente).
+- **Nunca se envía al navegador un campo que el rol no deba ver**, ni siquiera para "ocultarlo con CSS". Ejemplo: si un Trabajador consulta materia prima, el JSON que Django le entrega **no contiene** `costo_unitario` ni `valor_inventario` en absoluto — no es que el campo llegue y Webflow lo oculte. Esto se logra con **serializers de DRF distintos por rol** (ver sección 4), nunca con un serializer único "completo" filtrado en el cliente.
+- El "menú por rol" (sección 35 del prompt) en Webflow es solo una conveniencia de UX (mostrar/ocultar enlaces según el rol leído del token); la protección real es que, aunque un Trabajador edite el HTML/JS de su navegador e intente llamar directamente a `/api/v1/materia-prima/valor-inventario/`, el backend responde `403` porque valida `request.user.rol` en cada endpoint, siempre.
+- Rutas de Webflow por rol: cada rol tiene sus propias páginas Webflow (p. ej. `/panel/admin/...`, `/panel/produccion/...`, `/panel/reparto/...`, `/panel/cliente/...`). Al cargar cualquiera de esas páginas, un script de guardia (compartido entre páginas) valida el rol contenido en el JWT vigente y redirige si no coincide — esto es solo UX, la seguridad real vive en el backend como se explicó arriba.
+
+**Cómo se construye técnicamente el panel dentro de Webflow:**
+- Cada pantalla del sistema (Dashboard, Materia Prima, Producción, Ventas, Pedidos, Historial, etc.) es una página de Webflow con los contenedores/tablas/formularios maquetados visualmente.
+- Un conjunto de módulos de JavaScript (vanilla JS, cargados vía `<script>` en el Embed/Custom Code de Webflow, o alojados como archivos estáticos versionados aparte) se encargan de: autenticar, leer el rol, pedir datos a la API, pintar tablas dinámicas, manejar formularios y validaciones, y mostrar errores/confirmaciones — enlazados a los elementos de Webflow mediante atributos `id`/`data-*`.
+- Esto es más artesanal que un framework de frontend (React/Vue) y requiere disciplina para no duplicar lógica entre páginas, pero es viable y es la única forma de lograr "todo en Webflow" sin sacrificar la separación de responsabilidades pedida en la sección 5 del prompt (Webflow nunca toca la base de datos directamente).
+
+**Se retira, por tanto, el uso de Django templates.** Django Admin queda solo como herramienta interna de soporte técnico (no como parte del producto que usan los 4 roles).
 
 ### 3.6 Diagrama de arquitectura definitiva
 
 ```
-                    ┌────────────────────────────┐
-                    │   Webflow (opcional)        │
-                    │   Catálogo público / login  │
-                    │   SOLO para Cliente          │
-                    └──────────────┬──────────────┘
-                                   │ HTTPS / REST (JWT)
-                                   ▼
-┌───────────────────────────────────────────────────────────┐
-│                     DJANGO (monolito modular)               │
-│  ┌─────────────┐  ┌──────────────┐  ┌──────────────────┐   │
-│  │ Django       │  │ Django REST  │  │ Panel interno     │   │
-│  │ Admin (staff)│  │ Framework    │  │ (templates+JS)    │   │
-│  │              │  │ (API pública/│  │ Admin/Trabajador/ │   │
-│  │              │  │ móvil futuro)│  │ Repartidor         │   │
-│  └─────────────┘  └──────────────┘  └──────────────────┘   │
-│         │                 │                   │             │
-│         └────────────┬────┴───────────────────┘             │
-│                       ▼                                     │
-│              Capa de permisos y reglas de negocio            │
-│              (servicios / lógica de dominio)                 │
-└──────────────────────┬────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                          WEBFLOW (todo el frontend)                 │
+│  Páginas por rol + JS custom (fetch a la API, guardias de rol UX)    │
+│  Admin | Trabajador | Repartidor | Cliente                          │
+└───────────────────────────────┬────────────────────────────────────┘
+                                 │ HTTPS / REST (JWT access en memoria +
+                                 │ refresh en cookie HttpOnly, mismo dominio raíz)
+                                 ▼
+┌───────────────────────────────────────────────────────────────────┐
+│                    DJANGO (100% API — sin templates de producto)     │
+│  ┌───────────────┐   ┌───────────────────────────────────────┐      │
+│  │ Django Admin   │   │ Django REST Framework                  │      │
+│  │ (solo soporte  │   │ Serializers DISTINTOS por rol           │      │
+│  │  técnico dev)  │   │ Permisos validados en CADA endpoint     │      │
+│  └───────────────┘   └───────────────────────────────────────┘      │
+│                                   │                                  │
+│                                   ▼                                  │
+│              Capa de permisos y reglas de negocio                    │
+│              (servicios / lógica de dominio)                         │
+└──────────────────────┬───────────────────────────────────────────┘
                         │
           ┌─────────────┼───────────────────┐
           ▼             ▼                   ▼
@@ -146,9 +151,9 @@ Pediste explícitamente que evalúe esto con honestidad, así que aquí está si
 |---|---|
 | **PostgreSQL** | Única fuente de verdad de datos. |
 | **Django (ORM + lógica de dominio)** | Reglas de negocio: conversión lb/oz, costeo, control de stock negativo, estados de pedido, permisos por campo. |
-| **Django REST Framework** | Endpoints JSON para Webflow (catálogo público, pedidos de cliente) y para futura app móvil. |
-| **Django templates + Bootstrap + JS** | Panel interno operativo (Admin, Trabajador, Repartidor). |
-| **Webflow (opcional)** | Cara pública de marketing + catálogo + flujo de pedido del cliente, consumiendo la API. |
+| **Django REST Framework** | **Única** interfaz del sistema hacia el exterior: endpoints JSON para las 4 vistas de Webflow (Admin, Trabajador, Repartidor, Cliente) y, a futuro, app móvil. Cada endpoint decide qué campos entrega según `request.user.rol`. |
+| **Django Admin** | Panel técnico interno solo para soporte/depuración del desarrollador — no forma parte del producto que usan los 4 roles. |
+| **Webflow** | Interfaz visual completa del sistema (panel interno + cara pública), 100% vía llamadas a la API. Nunca accede a la base de datos directamente. |
 | **Google Calendar API** | Servicio adicional invocado por Django al crear/editar producción o entrega. |
 | **Odoo (futuro opcional)** | Contabilidad/fiscalidad formal, alimentada por Django. No es requerido para operar. |
 
@@ -156,11 +161,17 @@ Pediste explícitamente que evalúe esto con honestidad, así que aquí está si
 
 ## 4. AUTENTICACIÓN Y AUTORIZACIÓN
 
-- **Autenticación**: Django's `django.contrib.auth` (hash de contraseñas Argon2/PBKDF2), sesiones para el panel interno (cookies HttpOnly + CSRF), y **JWT (SimpleJWT)** para el consumo desde Webflow/API pública (clientes).
+Como Webflow consume la API desde un origen distinto hacia `api.<tu-dominio>` (Django), el esquema de autenticación es **100% basado en tokens**, sin sesiones de Django ni formularios server-rendered:
+
+- **Autenticación**: Django's `django.contrib.auth` (hash de contraseñas Argon2) + **JWT (SimpleJWT)**.
+  - **Access token**: de vida corta (10–15 min), se mantiene **en memoria de JavaScript** en la página de Webflow (nunca en `localStorage`, para reducir exposición ante un XSS).
+  - **Refresh token**: en **cookie HttpOnly + Secure + SameSite=Lax**, emitida por `api.<tu-dominio>`. Esto funciona sin fricción de CORS/SameSite si Webflow y la API se publican bajo el **mismo dominio raíz** (p. ej. `www.tupanaderia.com` para Webflow y `api.tupanaderia.com` para Django) — son "same-site" para el navegador aunque sean orígenes distintos, así que la cookie de refresh viaja automáticamente. **Esto es un requisito de dominio, no solo de configuración**: hay que apuntar el subdominio `api.` de tu dominio a Namecheap/Django desde el inicio.
+  - Si Webflow se publicara en un dominio *distinto* al de la API (p. ej. un subdominio gratuito tipo `algo.webflow.io`), el refresh en cookie deja de ser seguro entre sitios — por eso se recomienda dominio propio para ambos desde el día uno.
 - **Autorización por rol**: modelo `Usuario` (extiende `AbstractUser`) con campo `rol` (`ADMIN`, `TRABAJADOR`, `REPARTIDOR`, `CLIENTE`). Los administradores adicionales son simplemente usuarios con `rol=ADMIN`, creados por un Administrador existente (nunca autoregistro para ese rol).
-- **Autorización por campo** (crítico, regla #7/#30): se implementa con **serializers de DRF distintos por rol** y **querysets/`.only()`/exclusión de campos explícita** en las vistas — nunca se confía en ocultar botones en el HTML. Cada endpoint valida `request.user.rol` en el backend antes de construir la respuesta.
+- **Autorización por campo** (crítico, regla #7/#30, y ahora la única línea de defensa real dado que Webflow no valida nada en servidor): se implementa con **serializers de DRF distintos por rol** — el JSON que sale de Django hacia un Trabajador **físicamente no contiene** los campos financieros; no es que lleguen y se oculten en la interfaz. Cada endpoint valida `request.user.rol` en el backend antes de construir la respuesta.
 - **Permisos técnicos**: clases `permissions.BasePermission` custom por rol (`EsAdministrador`, `EsTrabajador`, `EsRepartidor`, `EsCliente`, más `EsPropietarioDelPedido` para que un repartidor solo vea sus entregas y un cliente solo sus pedidos).
-- **Auditoría de acceso indebido** (regla #40): pruebas automatizadas que golpean cada endpoint sensible con cada rol y verifican 403/campo ausente.
+- **CORS**: `django-cors-headers` restringido explícitamente a los dominios de Webflow usados (producción y, si aplica, staging), con `CORS_ALLOW_CREDENTIALS=True` para permitir el envío de la cookie de refresh.
+- **Auditoría de acceso indebido** (regla #40): pruebas automatizadas que golpean cada endpoint sensible con cada rol y verifican 403/campo ausente en la respuesta JSON — no solo que la UI no lo muestre.
 
 ---
 
@@ -281,8 +292,8 @@ Prefijo `/api/v1/`. Todos requieren autenticación salvo `catalogo/` de solo lec
 
 - HTTPS obligatorio (Let's Encrypt vía cPanel de Namecheap o proxy).
 - Contraseñas con hashing fuerte (Argon2 vía `django-argon2`).
-- CSRF activo en panel interno; JWT + CORS restringido a dominios conocidos para la API pública/Webflow.
-- Rate limiting en login y endpoints públicos (`django-ratelimit`).
+- Sin sesiones/CSRF de Django para el producto (todo es API stateless con JWT); CORS restringido a los dominios de Webflow conocidos; cookie de refresh HttpOnly+Secure+SameSite.
+- Rate limiting en login y endpoints públicos (`django-ratelimit`), especialmente relevante al no haber CSRF de por medio.
 - Validación de permisos en **cada** vista/endpoint (nunca solo en frontend) — cubierto por pruebas automatizadas (Fase 15/40).
 - Variables de entorno (`.env`, nunca en el repositorio) para: `SECRET_KEY`, credenciales de PostgreSQL, credenciales de Google Calendar (`client_secret.json`/token), y futura credencial de Odoo.
 - Registro de operaciones sensibles en `RegistroAuditoria` (quién, qué, cuándo, valores previos/nuevos).
@@ -307,25 +318,24 @@ Prefijo `/api/v1/`. Todos requieren autenticación salvo `catalogo/` de solo lec
 
 ## 10. FASES DE DESARROLLO (confirmación del plan pedido)
 
-Se sigue el plan de 16 fases que definiste (sección 39 del prompt), con la aclaración de que Fase 14 (Odoo) queda como integración opcional post-lanzamiento y Fase 13 (Webflow) se acota a la cara pública del cliente salvo que me indiques lo contrario. Cada fase se entrega con sus propias pruebas antes de continuar (regla #39/#40).
+Se sigue el plan de 16 fases que definiste (sección 39 del prompt). Fase 14 (Odoo) queda como integración opcional post-lanzamiento. **Fase 13 (Webflow) ahora cubre el diseño completo del sistema** (panel interno + cara pública), no solo la parte pública, conforme a tu decisión. Cada fase se entrega con sus propias pruebas antes de continuar (regla #39/#40).
 
 ---
 
 ## 11. RIESGOS Y LIMITACIONES DECLARADOS
 
-1. **Webflow no es apto para el panel interno completo** — ver sección 3.5. Necesito tu confirmación de alcance.
-2. **PostgreSQL en Namecheap shared hosting no está garantizado** en todos los planes — ver sección 9.
-3. **No hay motor de recetas automático** en el MVP (no se especificaron proporciones) — el consumo de materia prima por producción se captura manualmente, tal como exige la regla #36.
-4. **No hay pasarela de pago real** definida — el campo existe pero sin lógica de cobro hasta que la definas.
-5. **Odoo pospuesto**: si en algún momento decides que sí es indispensable como núcleo (no solo contabilidad), eso implica volver a evaluar el hosting (VPS) y una re-arquitectura parcial — se declara explícitamente para que la decisión sea informada.
+1. **Webflow para todo el panel interno — decisión confirmada.** Riesgo aceptado: no hay validación de servidor en la capa visual, por lo que **toda** la seguridad recae en Django/DRF (serializers por rol, permisos en cada endpoint). Cualquier fuga de datos financieros a un rol no autorizado sería un defecto del backend, no del frontend — así se diseñarán y probarán los serializers (Fase 5 en adelante).
+2. **Requisito de dominio propio compartido** entre Webflow y la API (`www.tudominio.com` + `api.tudominio.com`) para que la autenticación por cookie de refresh sea segura y sin fricciones de CORS — ver sección 4. Si aún no tienes el dominio configurado así, es una tarea previa a Fase 16 (y conviene resolverla antes, para probar la autenticación real en Fase 5).
+3. **PostgreSQL en Namecheap shared hosting no está garantizado** en todos los planes — ver sección 9. Sigue pendiente de tu confirmación (punto 3 de tu respuesta: "no poseo esa información"). No bloquea el desarrollo (Fases 4–15 se pueden construir y probar localmente/en cualquier PostgreSQL), pero sí debe resolverse antes de Fase 16 (despliegue). Cuando tengas o elijas el plan de Namecheap, lo verificamos.
+4. **No hay motor de recetas automático** en el MVP (no se especificaron proporciones) — el consumo de materia prima por producción se captura manualmente, tal como exige la regla #36. Mantengo este supuesto por defecto (tu respuesta fue "no sé"); es ajustable después sin romper el diseño si más adelante quieres recetas estandarizadas.
+5. **Asignación manual de repartidor y precio de venta manual** (sección 2.2, puntos 2 y 6): se mantienen como supuestos por defecto configurables, ya que no indicaste lo contrario.
+6. **No hay pasarela de pago real** definida — el campo existe pero sin lógica de cobro hasta que la definas.
+7. **Odoo pospuesto**: si en algún momento decides que sí es indispensable como núcleo (no solo contabilidad), eso implica volver a evaluar el hosting (VPS) y una re-arquitectura parcial — se declara explícitamente para que la decisión sea informada.
 
 ---
 
 ## 12. SIGUIENTE PASO
 
-Quedo a la espera de tu aprobación (o ajustes) sobre:
-1. El alcance de Webflow (sección 3.5).
-2. Los supuestos de la sección 2.2 (especialmente: recetas manuales, asignación manual de repartidor, precio de venta manual).
-3. El plan de hosting de Namecheap contratado (para validar PostgreSQL).
-
-Con eso confirmado, continúo con **Fase 4 (Configuración del proyecto Django)** y siguientes, sin generar código de negocio hasta ese punto.
+Con el alcance de Webflow confirmado (todo el sistema) y los supuestos de la sección 2.2 mantenidos por defecto, se procede a **Fase 4 (Configuración del proyecto Django + DRF)**. Puntos que seguirán abiertos y no bloquean el arranque:
+- Confirmar el plan de Namecheap y disponibilidad de PostgreSQL (antes de Fase 16).
+- Contar con el dominio propio para configurar `www.` (Webflow) y `api.` (Django) antes de probar el flujo de autenticación real (Fase 5).
