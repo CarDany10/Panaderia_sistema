@@ -14,10 +14,22 @@ from django.db import transaction
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
+from apps.notificaciones import services as notificaciones_services
+from apps.notificaciones.models import Notificacion
 from apps.produccion.models import MovimientoInventarioProductoTerminado, Paquete, Producto
 from apps.usuarios.models import PerfilRepartidor
 
 from .models import Calificacion, DetallePedido, Entrega, Pedido
+
+
+def _notificar_cliente(*, pedido, mensaje):
+    notificaciones_services.crear_notificacion(
+        destinatario=pedido.cliente,
+        tipo=Notificacion.Tipo.ESTADO_PEDIDO,
+        titulo=f"Pedido #{pedido.numero}",
+        mensaje=mensaje,
+        referencia_id=pedido.id,
+    )
 
 
 @transaction.atomic
@@ -78,6 +90,14 @@ def registrar_pedido(*, cliente, items, direccion_entrega, telefono_contacto):
 
     pedido.total = total
     pedido.save(update_fields=["total"])
+
+    _notificar_cliente(pedido=pedido, mensaje="Recibimos tu pedido y está pendiente de preparación.")
+    notificaciones_services.notificar_admins(
+        tipo=Notificacion.Tipo.NUEVO_PEDIDO,
+        titulo=f"Nuevo pedido #{pedido.numero}",
+        mensaje=f"{cliente.username} realizó un pedido por un total de Q{total}.",
+        referencia_id=pedido.id,
+    )
     return pedido
 
 
@@ -94,6 +114,15 @@ def asignar_repartidor(*, pedido_id, repartidor, creado_por):
     if pedido.estado == Pedido.Estado.PENDIENTE:
         pedido.estado = Pedido.Estado.EN_PREPARACION
         pedido.save(update_fields=["estado"])
+
+    notificaciones_services.crear_notificacion(
+        destinatario=repartidor,
+        tipo=Notificacion.Tipo.PEDIDO_ASIGNADO,
+        titulo=f"Nuevo pedido asignado #{pedido.numero}",
+        mensaje=f"Se te asignó el pedido #{pedido.numero} para entrega en: {pedido.direccion_entrega}.",
+        referencia_id=pedido.id,
+    )
+    _notificar_cliente(pedido=pedido, mensaje="Tu pedido está en preparación.")
     return pedido
 
 
@@ -106,6 +135,7 @@ def marcar_en_camino(*, pedido_id, repartidor):
         raise ValidationError("Solo un pedido en preparación puede pasar a 'en camino'.")
     pedido.estado = Pedido.Estado.EN_CAMINO
     pedido.save(update_fields=["estado"])
+    _notificar_cliente(pedido=pedido, mensaje="Tu pedido va en camino.")
     return pedido
 
 
@@ -121,6 +151,7 @@ def marcar_entregado(*, pedido_id, repartidor):
     entrega = pedido.entrega
     entrega.fecha_entrega = timezone.now()
     entrega.save(update_fields=["fecha_entrega"])
+    _notificar_cliente(pedido=pedido, mensaje="Tu pedido fue entregado. ¡Gracias por tu compra!")
     return pedido
 
 
@@ -147,6 +178,16 @@ def cancelar_pedido(*, pedido_id, motivo, creado_por, solo_si_pendiente=False):
 
     pedido.estado = Pedido.Estado.CANCELADO
     pedido.save(update_fields=["estado"])
+
+    _notificar_cliente(pedido=pedido, mensaje=f"Tu pedido fue cancelado: {motivo}")
+    if hasattr(pedido, "entrega"):
+        notificaciones_services.crear_notificacion(
+            destinatario=pedido.entrega.repartidor,
+            tipo=Notificacion.Tipo.ESTADO_PEDIDO,
+            titulo=f"Pedido #{pedido.numero} cancelado",
+            mensaje=f"El pedido #{pedido.numero} que tenías asignado fue cancelado: {motivo}",
+            referencia_id=pedido.id,
+        )
     return pedido
 
 

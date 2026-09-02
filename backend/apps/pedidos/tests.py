@@ -282,3 +282,73 @@ class CancelarPedidoTests(APITestCase):
         resp = self.client.post(f"/api/v1/pedidos/{self.pedido.id}/cancelar/", {"motivo": "Ya no lo quiero"}, format="json")
         self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
         self.assertEqual(resp.data["estado"], "CANCELADO")
+
+
+class NotificacionesDePedidoTests(APITestCase):
+    def setUp(self):
+        from apps.notificaciones.models import Notificacion
+
+        self.Notificacion = Notificacion
+        self.admin = crear_usuario("admin_notif_ped", Usuario.Rol.ADMIN)
+        self.cliente = crear_usuario("cliente_notif_ped", Usuario.Rol.CLIENTE)
+        self.repartidor = crear_usuario("rep_notif_ped", Usuario.Rol.REPARTIDOR)
+        self.producto = Producto.objects.create(nombre="Pan Notif", precio_unitario=Decimal("1.00"))
+        produccion_services.registrar_ajuste_producto_terminado(
+            producto_id=self.producto.id, cantidad_delta=Decimal("50"), motivo="Carga", creado_por=self.admin
+        )
+
+    def test_crear_pedido_notifica_cliente_y_admin(self):
+        pedido = services.registrar_pedido(
+            cliente=self.cliente,
+            items=[{"producto_id": self.producto.id, "cantidad": Decimal("3"), "paquete_id": None}],
+            direccion_entrega="Zona 4",
+            telefono_contacto="1111-2222",
+        )
+        self.assertTrue(
+            self.Notificacion.objects.filter(
+                destinatario=self.cliente, tipo=self.Notificacion.Tipo.ESTADO_PEDIDO, referencia_id=pedido.id
+            ).exists()
+        )
+        self.assertTrue(
+            self.Notificacion.objects.filter(
+                destinatario=self.admin, tipo=self.Notificacion.Tipo.NUEVO_PEDIDO, referencia_id=pedido.id
+            ).exists()
+        )
+
+    def test_flujo_completo_genera_notificacion_en_cada_paso(self):
+        pedido = services.registrar_pedido(
+            cliente=self.cliente,
+            items=[{"producto_id": self.producto.id, "cantidad": Decimal("2"), "paquete_id": None}],
+            direccion_entrega="Zona 4",
+            telefono_contacto="1111-2222",
+        )
+        services.asignar_repartidor(pedido_id=pedido.id, repartidor=self.repartidor, creado_por=self.admin)
+        self.assertTrue(
+            self.Notificacion.objects.filter(
+                destinatario=self.repartidor, tipo=self.Notificacion.Tipo.PEDIDO_ASIGNADO
+            ).exists()
+        )
+        services.marcar_en_camino(pedido_id=pedido.id, repartidor=self.repartidor)
+        services.marcar_entregado(pedido_id=pedido.id, repartidor=self.repartidor)
+
+        mensajes_cliente = list(
+            self.Notificacion.objects.filter(
+                destinatario=self.cliente, tipo=self.Notificacion.Tipo.ESTADO_PEDIDO
+            ).values_list("mensaje", flat=True)
+        )
+        # Recibido, en preparación, en camino, entregado.
+        self.assertEqual(len(mensajes_cliente), 4)
+
+    def test_cancelar_pedido_notifica_a_cliente_y_repartidor_asignado(self):
+        pedido = services.registrar_pedido(
+            cliente=self.cliente,
+            items=[{"producto_id": self.producto.id, "cantidad": Decimal("2"), "paquete_id": None}],
+            direccion_entrega="Zona 4",
+            telefono_contacto="1111-2222",
+        )
+        services.asignar_repartidor(pedido_id=pedido.id, repartidor=self.repartidor, creado_por=self.admin)
+        services.cancelar_pedido(pedido_id=pedido.id, motivo="Sin insumos", creado_por=self.admin)
+
+        self.assertTrue(
+            self.Notificacion.objects.filter(destinatario=self.repartidor, titulo__icontains="cancelado").exists()
+        )

@@ -15,6 +15,27 @@ from .models import Compra, MateriaPrima, MovimientoInventarioMateriaPrima
 FACTOR_LB_A_OZ = Decimal("16")
 
 
+def _notificar_si_cruza_stock_minimo(*, materia_prima, estaba_bajo_antes):
+    """Alerta de stock bajo (sección 13): se dispara solo en la transición de
+    'por encima del mínimo' a 'por debajo', no en cada movimiento posterior
+    mientras siga bajo, para no saturar de notificaciones repetidas al Admin."""
+    if materia_prima.stock_bajo and not estaba_bajo_antes:
+        from apps.notificaciones import services as notificaciones_services
+        from apps.notificaciones.models import Notificacion
+
+        notificaciones_services.notificar_admins(
+            tipo=Notificacion.Tipo.STOCK_BAJO,
+            titulo=f"Stock bajo: {materia_prima.nombre}",
+            mensaje=(
+                f"{materia_prima.nombre} tiene una existencia de {materia_prima.stock_actual} "
+                f"{materia_prima.unidad_medida}, por debajo del mínimo configurado de "
+                f"{materia_prima.stock_minimo} {materia_prima.unidad_medida} "
+                f"(diferencia: {materia_prima.stock_minimo - materia_prima.stock_actual})."
+            ),
+            referencia_id=materia_prima.id,
+        )
+
+
 def convertir_cantidad(cantidad, de_unidad, a_unidad):
     """1 libra = 16 onzas. Nunca se usa float para no perder precisión."""
     cantidad = Decimal(cantidad)
@@ -107,6 +128,7 @@ def consumir_fifo(*, materia_prima_id, cantidad_nativa, tipo, motivo, creado_por
             "Materia prima insuficiente para esta operación: "
             f"disponible {materia_prima.stock_actual}, solicitado {cantidad_nativa}."
         )
+    estaba_bajo_antes = materia_prima.stock_bajo
 
     restante = cantidad_nativa
     movimientos = []
@@ -139,6 +161,7 @@ def consumir_fifo(*, materia_prima_id, cantidad_nativa, tipo, motivo, creado_por
             "Los lotes de compra registrados no cubren el stock disponible; "
             "revisar el inventario antes de continuar."
         )
+    _notificar_si_cruza_stock_minimo(materia_prima=materia_prima, estaba_bajo_antes=estaba_bajo_antes)
     return movimientos
 
 
@@ -154,9 +177,10 @@ def registrar_ajuste(*, materia_prima_id, cantidad_delta, motivo, creado_por):
     nuevo_stock = materia_prima.stock_actual + cantidad_delta
     if nuevo_stock < 0:
         raise ValidationError("El ajuste dejaría el inventario en negativo.")
+    estaba_bajo_antes = materia_prima.stock_bajo
     materia_prima.stock_actual = nuevo_stock
     materia_prima.save(update_fields=["stock_actual"])
-    return MovimientoInventarioMateriaPrima.objects.create(
+    movimiento = MovimientoInventarioMateriaPrima.objects.create(
         materia_prima=materia_prima,
         tipo=MovimientoInventarioMateriaPrima.Tipo.AJUSTE,
         cantidad=cantidad_delta,
@@ -164,3 +188,5 @@ def registrar_ajuste(*, materia_prima_id, cantidad_delta, motivo, creado_por):
         saldo_resultante=materia_prima.stock_actual,
         creado_por=creado_por,
     )
+    _notificar_si_cruza_stock_minimo(materia_prima=materia_prima, estaba_bajo_antes=estaba_bajo_antes)
+    return movimiento

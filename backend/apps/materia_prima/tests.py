@@ -354,3 +354,60 @@ class AlertaStockBajoTests(APITestCase):
         self.client.force_authenticate(user=trabajador)
         resp = self.client.get("/api/v1/materia-prima/alertas-stock-bajo/")
         self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+
+class NotificacionStockBajoTests(APITestCase):
+    def setUp(self):
+        from apps.notificaciones.models import Notificacion
+
+        self.Notificacion = Notificacion
+        self.admin = crear_usuario("admin_notif_stock", Usuario.Rol.ADMIN)
+        self.harina = MateriaPrima.objects.create(
+            nombre="Harina Notif", unidad_medida=UnidadMedida.LB, stock_minimo=Decimal("20")
+        )
+        services.registrar_compra(
+            materia_prima_id=self.harina.id,
+            lote="N-1",
+            cantidad=Decimal("100"),
+            unidad_medida="LB",
+            costo_total=Decimal("400"),
+            fecha_compra=date.today(),
+            creado_por=self.admin,
+        )
+
+    def test_cruzar_el_minimo_notifica_una_sola_vez(self):
+        # De 100 a 30: sigue por encima del mínimo (20), no debe notificar.
+        services.consumir_fifo(
+            materia_prima_id=self.harina.id, cantidad_nativa=Decimal("70"),
+            tipo=MovimientoInventarioMateriaPrima.Tipo.MERMA, motivo="m1", creado_por=self.admin,
+        )
+        self.assertEqual(
+            self.Notificacion.objects.filter(
+                destinatario=self.admin, tipo=self.Notificacion.Tipo.STOCK_BAJO
+            ).count(),
+            0,
+        )
+
+        # De 30 a 10: cruza por debajo del mínimo -> debe notificar.
+        services.consumir_fifo(
+            materia_prima_id=self.harina.id, cantidad_nativa=Decimal("20"),
+            tipo=MovimientoInventarioMateriaPrima.Tipo.MERMA, motivo="m2", creado_por=self.admin,
+        )
+        self.assertEqual(
+            self.Notificacion.objects.filter(
+                destinatario=self.admin, tipo=self.Notificacion.Tipo.STOCK_BAJO
+            ).count(),
+            1,
+        )
+
+        # De 10 a 5: sigue bajo el mínimo -> NO debe volver a notificar.
+        services.consumir_fifo(
+            materia_prima_id=self.harina.id, cantidad_nativa=Decimal("5"),
+            tipo=MovimientoInventarioMateriaPrima.Tipo.MERMA, motivo="m3", creado_por=self.admin,
+        )
+        self.assertEqual(
+            self.Notificacion.objects.filter(
+                destinatario=self.admin, tipo=self.Notificacion.Tipo.STOCK_BAJO
+            ).count(),
+            1,
+        )
