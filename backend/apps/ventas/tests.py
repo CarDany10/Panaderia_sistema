@@ -4,7 +4,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from apps.produccion import services as produccion_services
-from apps.produccion.models import MovimientoInventarioProductoTerminado, Paquete, Producto
+from apps.produccion.models import Paquete, Producto
 from apps.usuarios.models import Usuario
 
 from . import services

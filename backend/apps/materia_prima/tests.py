@@ -7,7 +7,7 @@ from rest_framework.test import APITestCase
 from apps.usuarios.models import Usuario
 
 from . import services
-from .models import Compra, MateriaPrima, MovimientoInventarioMateriaPrima, UnidadMedida
+from .models import MateriaPrima, MovimientoInventarioMateriaPrima, UnidadMedida
 
 
 def crear_usuario(username, rol):
