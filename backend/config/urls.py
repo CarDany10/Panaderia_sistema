@@ -1,7 +1,9 @@
 from django.contrib import admin
 from django.http import JsonResponse
-from django.urls import path
+from django.urls import include, path
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+
+from apps.usuarios.views import LogoutView
 
 
 def health(request):
@@ -14,6 +16,8 @@ urlpatterns = [
     path("api/v1/health/", health, name="health"),
     path("api/v1/auth/login/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
     path("api/v1/auth/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
-    # Los endpoints propios de cada módulo (usuarios, materia prima, producción, etc.)
-    # se agregan a partir de Fase 5 en adelante, con sus permisos y serializers por rol.
+    path("api/v1/auth/logout/", LogoutView.as_view(), name="token_logout"),
+    path("api/v1/usuarios/", include("apps.usuarios.urls")),
+    # Los endpoints de los demás módulos (materia prima, producción, etc.) se agregan
+    # a partir de Fase 6 en adelante, con sus permisos y serializers por rol.
 ]
