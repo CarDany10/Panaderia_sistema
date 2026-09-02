@@ -19,6 +19,7 @@ urlpatterns = [
     path("api/v1/auth/logout/", LogoutView.as_view(), name="token_logout"),
     path("api/v1/usuarios/", include("apps.usuarios.urls")),
     path("api/v1/materia-prima/", include("apps.materia_prima.urls")),
-    # Los endpoints de los demás módulos (producción, ventas, etc.) se agregan
-    # a partir de Fase 7 en adelante, con sus permisos y serializers por rol.
+    path("api/v1/produccion/", include("apps.produccion.urls")),
+    # Los endpoints de los demás módulos (ventas, pedidos, etc.) se agregan
+    # a partir de Fase 9 en adelante, con sus permisos y serializers por rol.
 ]
