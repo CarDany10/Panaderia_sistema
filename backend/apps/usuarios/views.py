@@ -1,9 +1,12 @@
+from django.utils.decorators import method_decorator
+from django_ratelimit.decorators import ratelimit
 from rest_framework import generics, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.views import TokenObtainPairView
 
 from .models import Usuario
 from .permissions import EsAdministrador
@@ -14,11 +17,45 @@ from .serializers import (
 )
 
 
+class LoginRateLimitedView(TokenObtainPairView):
+    """Login con límite de intentos por IP (protección contra fuerza bruta de
+    contraseñas, regla de seguridad #30 del sistema).
+
+    Nota de despliegue: django-ratelimit usa el backend de caché de Django; con
+    la caché en memoria local (la que queda si no se configura otra), el límite
+    es por proceso — en un despliegue con varios workers, el límite real
+    efectivo se multiplica por esa cantidad. Para un límite exacto entre
+    workers, configurar un backend de caché compartido (p. ej. Redis o el de
+    base de datos) en producción.
+    """
+
+    @method_decorator(ratelimit(key="ip", rate="10/m", method="POST", block=False))
+    def post(self, request, *args, **kwargs):
+        if getattr(request, "limited", False):
+            return Response(
+                {"detail": "Demasiados intentos de inicio de sesión. Espera un momento e intenta de nuevo."},
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+        return super().post(request, *args, **kwargs)
+
+
 class RegistroClienteView(generics.CreateAPIView):
-    """Alta pública de una cuenta de Cliente. No requiere autenticación."""
+    """Alta pública de una cuenta de Cliente. No requiere autenticación.
+
+    Límite de intentos por IP para evitar registro masivo/spam automatizado.
+    """
 
     serializer_class = RegistroClienteSerializer
     permission_classes = [permissions.AllowAny]
+
+    @method_decorator(ratelimit(key="ip", rate="5/h", method="POST", block=False))
+    def post(self, request, *args, **kwargs):
+        if getattr(request, "limited", False):
+            return Response(
+                {"detail": "Demasiados registros desde esta conexión. Intenta de nuevo más tarde."},
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+        return super().post(request, *args, **kwargs)
 
 
 class LogoutView(APIView):

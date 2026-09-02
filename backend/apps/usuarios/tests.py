@@ -1,3 +1,4 @@
+from django.core.cache import cache
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -249,3 +250,52 @@ class AutenticacionJWTTests(APITestCase):
             "/api/v1/auth/refresh/", {"refresh": refresh}, format="json"
         )
         self.assertEqual(refresh_resp.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+class RateLimitTests(APITestCase):
+    def setUp(self):
+        cache.clear()
+        crear_usuario("admin_ratelimit", Usuario.Rol.ADMIN, password="ClaveSegura123!")
+
+    def tearDown(self):
+        cache.clear()
+
+    def test_login_se_bloquea_tras_demasiados_intentos(self):
+        for _ in range(10):
+            resp = self.client.post(
+                "/api/v1/auth/login/",
+                {"username": "admin_ratelimit", "password": "incorrecta"},
+                format="json",
+            )
+            self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        bloqueado = self.client.post(
+            "/api/v1/auth/login/",
+            {"username": "admin_ratelimit", "password": "incorrecta"},
+            format="json",
+        )
+        self.assertEqual(bloqueado.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+
+    def test_login_correcto_no_se_bloquea_con_pocos_intentos(self):
+        resp = self.client.post(
+            "/api/v1/auth/login/",
+            {"username": "admin_ratelimit", "password": "ClaveSegura123!"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+    def test_registro_cliente_se_bloquea_tras_demasiados_intentos(self):
+        for i in range(5):
+            resp = self.client.post(
+                "/api/v1/usuarios/registro-cliente/",
+                {"username": f"spam_cliente_{i}", "password": "ClaveSegura123!"},
+                format="json",
+            )
+            self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+
+        bloqueado = self.client.post(
+            "/api/v1/usuarios/registro-cliente/",
+            {"username": "spam_cliente_6", "password": "ClaveSegura123!"},
+            format="json",
+        )
+        self.assertEqual(bloqueado.status_code, status.HTTP_429_TOO_MANY_REQUESTS)

@@ -193,7 +193,18 @@ def cancelar_pedido(*, pedido_id, motivo, creado_por, solo_si_pendiente=False):
 
 @transaction.atomic
 def calificar_repartidor(*, pedido_id, cliente, estrellas, comentario=""):
-    pedido = Pedido.objects.select_related("entrega").get(pk=pedido_id)
+    # select_for_update evita que dos solicitudes simultáneas (p. ej. un doble
+    # clic) pasen ambas la validación de "no calificado todavía" y terminen
+    # chocando contra la restricción única de la base de datos como error 500
+    # en lugar de un mensaje de validación controlado.
+    # of=("self",): PostgreSQL no permite FOR UPDATE sobre el lado nulo de un
+    # LEFT OUTER JOIN (select_related("entrega") es uno, ya que no todo pedido
+    # tiene entrega); esto restringe el bloqueo a la fila de Pedido en sí.
+    pedido = (
+        Pedido.objects.select_related("entrega")
+        .select_for_update(of=("self",))
+        .get(pk=pedido_id)
+    )
     if pedido.estado != Pedido.Estado.ENTREGADO:
         raise ValidationError("Solo se puede calificar un pedido ya entregado.")
     if not hasattr(pedido, "entrega"):

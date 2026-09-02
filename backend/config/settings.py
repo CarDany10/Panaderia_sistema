@@ -142,8 +142,22 @@ CORS_ALLOW_CREDENTIALS = True
 
 # --- Cookies / seguridad de transporte ---
 SESSION_COOKIE_SECURE = not DEBUG
+SESSION_COOKIE_HTTPONLY = True
 CSRF_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_HTTPONLY = True
 SECURE_SSL_REDIRECT = config("SECURE_SSL_REDIRECT", default=not DEBUG, cast=bool)
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = "same-origin"
+# HSTS deshabilitado por defecto (0 = no activo): activarlo a la ligera antes de
+# confirmar que TODO el sitio sirve siempre por HTTPS puede dejarlo inaccesible
+# durante el tiempo configurado. Namecheap con AutoSSL/Let's Encrypt (sección 9
+# del análisis de arquitectura): una vez confirmado HTTPS estable, definir
+# SECURE_HSTS_SECONDS en el .env de producción (empezar bajo, p. ej. 3600, e ir
+# subiendo — nunca activar SECURE_HSTS_PRELOAD sin entender que es prácticamente
+# irreversible).
+SECURE_HSTS_SECONDS = config("SECURE_HSTS_SECONDS", default=0, cast=int)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = SECURE_HSTS_SECONDS > 0
+SECURE_HSTS_PRELOAD = config("SECURE_HSTS_PRELOAD", default=False, cast=bool) and SECURE_HSTS_SECONDS > 0
 
 # --- Google Calendar ---
 # Credenciales de una cuenta de servicio (JSON completo, no una ruta de archivo)
