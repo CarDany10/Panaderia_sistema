@@ -35,6 +35,17 @@ class ProductoTrabajadorSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class ProductoClienteSerializer(serializers.ModelSerializer):
+    """Catálogo público para armar un pedido: precio y disponibilidad sí son
+    relevantes para el Cliente (a diferencia del Trabajador), no son secretos
+    administrativos como el costo o el valor de inventario."""
+
+    class Meta:
+        model = Producto
+        fields = ["id", "nombre", "descripcion", "precio_unitario", "stock_actual", "activo"]
+        read_only_fields = fields
+
+
 class ConsumoMateriaPrimaEntradaSerializer(serializers.Serializer):
     """Un ítem del payload de entrada al registrar una producción (no es un
     ModelSerializer: el consumo real se calcula en services.registrar_produccion)."""

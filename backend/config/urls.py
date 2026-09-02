@@ -21,6 +21,7 @@ urlpatterns = [
     path("api/v1/materia-prima/", include("apps.materia_prima.urls")),
     path("api/v1/produccion/", include("apps.produccion.urls")),
     path("api/v1/ventas/", include("apps.ventas.urls")),
-    # Los endpoints de los demás módulos (pedidos, repartidores, etc.) se agregan
-    # a partir de Fase 10 en adelante, con sus permisos y serializers por rol.
+    path("api/v1/pedidos/", include("apps.pedidos.urls")),
+    # Los endpoints de los demás módulos (calendario, notificaciones, historial) se
+    # agregan a partir de Fase 11 en adelante.
 ]

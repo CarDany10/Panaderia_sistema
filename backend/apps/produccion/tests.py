@@ -9,7 +9,7 @@ from apps.materia_prima.models import MateriaPrima, UnidadMedida
 from apps.usuarios.models import Usuario
 
 from . import services
-from .models import MovimientoInventarioProductoTerminado, Producto, Produccion
+from .models import MovimientoInventarioProductoTerminado, Paquete, Producto, Produccion
 
 
 def crear_usuario(username, rol):
@@ -211,6 +211,27 @@ class ProductoVisibilidadTests(APITestCase):
         resp = self.client.get("/api/v1/produccion/")
         self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
 
+    def test_cliente_ve_precio_y_stock_para_comprar(self):
+        cliente = crear_usuario("cli_vis_prod", Usuario.Rol.CLIENTE)
+        self.client.force_authenticate(user=cliente)
+        resp = self.client.get(f"/api/v1/produccion/{self.producto.id}/")
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertIn("precio_unitario", resp.data)
+        self.assertIn("stock_actual", resp.data)
+        # Pero no puede administrar el catálogo.
+        resp = self.client.post(
+            "/api/v1/produccion/", {"nombre": "Otro", "precio_unitario": "1"}, format="json"
+        )
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_cliente_no_ve_productos_inactivos(self):
+        cliente = crear_usuario("cli_inactivo", Usuario.Rol.CLIENTE)
+        Producto.objects.create(nombre="Descontinuado", precio_unitario=Decimal("1"), activo=False)
+        self.client.force_authenticate(user=cliente)
+        resp = self.client.get("/api/v1/produccion/")
+        nombres = [p["nombre"] for p in resp.data["results"]] if "results" in resp.data else [p["nombre"] for p in resp.data]
+        self.assertNotIn("Descontinuado", nombres)
+
     def test_trabajador_no_puede_crear_producto(self):
         self.client.force_authenticate(user=self.trabajador)
         resp = self.client.post(
@@ -261,6 +282,38 @@ class MermaYAjusteProductoTerminadoTests(APITestCase):
         resp = self.client.post(
             f"/api/v1/produccion/{self.producto.id}/ajustar/",
             {"cantidad_delta": "1", "motivo": "intento"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+
+class PaqueteVisibilidadTests(APITestCase):
+    def setUp(self):
+        self.admin = crear_usuario("admin_pq_vis", Usuario.Rol.ADMIN)
+        self.cliente = crear_usuario("cli_pq_vis", Usuario.Rol.CLIENTE)
+        self.producto = Producto.objects.create(nombre="Champurrada Vis", precio_unitario=Decimal("0.75"))
+        self.paquete_activo = Paquete.objects.create(
+            producto=self.producto, nombre="x20", unidades_por_paquete=20, precio_paquete=Decimal("12")
+        )
+        self.paquete_inactivo = Paquete.objects.create(
+            producto=self.producto, nombre="x50 descontinuado", unidades_por_paquete=50,
+            precio_paquete=Decimal("25"), activo=False,
+        )
+
+    def test_cliente_solo_ve_paquetes_activos(self):
+        self.client.force_authenticate(user=self.cliente)
+        resp = self.client.get("/api/v1/produccion/paquetes/")
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        data = resp.data["results"] if "results" in resp.data else resp.data
+        nombres = [p["nombre"] for p in data]
+        self.assertIn("x20", nombres)
+        self.assertNotIn("x50 descontinuado", nombres)
+
+    def test_cliente_no_puede_crear_paquete(self):
+        self.client.force_authenticate(user=self.cliente)
+        resp = self.client.post(
+            "/api/v1/produccion/paquetes/",
+            {"producto": self.producto.id, "nombre": "otro", "unidades_por_paquete": 5, "precio_paquete": "5"},
             format="json",
         )
         self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)

@@ -3,7 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from apps.usuarios.models import Usuario
-from apps.usuarios.permissions import EsAdministrador, EsTrabajador
+from apps.usuarios.permissions import EsAdministrador, EsCliente, EsTrabajador
 
 from . import services
 from .models import Paquete, Producto, Produccion
@@ -16,36 +16,56 @@ from .serializers import (
     ProduccionCrearSerializer,
     ProduccionTrabajadorSerializer,
     ProductoAdminSerializer,
+    ProductoClienteSerializer,
     ProductoTrabajadorSerializer,
 )
 
 
 class PaqueteViewSet(viewsets.ModelViewSet):
-    """Configuración de venta por paquete de un producto. Exclusivo de Administrador
-    en esta fase; se expone lectura pública/de cliente al construir Pedidos (Fase 10)."""
+    """Configuración de venta por paquete de un producto. Alta/edición exclusiva de
+    Administrador; lectura también disponible para Cliente (para armar su pedido,
+    Fase 10) y Trabajador."""
 
-    queryset = Paquete.objects.select_related("producto").all()
     serializer_class = PaqueteSerializer
-    permission_classes = [EsAdministrador]
+
+    def get_permissions(self):
+        if self.action in ("list", "retrieve"):
+            return [(EsAdministrador | EsTrabajador | EsCliente)()]
+        return [EsAdministrador()]
+
+    def get_queryset(self):
+        qs = Paquete.objects.select_related("producto").all()
+        if self.request.user.is_authenticated and self.request.user.rol == Usuario.Rol.CLIENTE:
+            return qs.filter(activo=True, producto__activo=True)
+        return qs
+
     http_method_names = ["get", "post", "patch", "head", "options"]
 
 
 class ProductoViewSet(viewsets.ModelViewSet):
     """Catálogo de producto terminado. Alta/edición, ajustes y mermas directas son
-    exclusivas de Administrador; la lectura (con campos filtrados) es compartida
-    con Trabajador, que la necesita para registrar producciones."""
+    exclusivas de Administrador; la lectura (con campos filtrados por rol) también
+    la usan Trabajador (para producir) y Cliente (para comprar, Fase 10)."""
 
-    queryset = Producto.objects.all()
     http_method_names = ["get", "post", "patch", "head", "options"]
 
     def get_permissions(self):
         if self.action in ("list", "retrieve"):
-            return [(EsAdministrador | EsTrabajador)()]
+            return [(EsAdministrador | EsTrabajador | EsCliente)()]
         return [EsAdministrador()]
 
+    def get_queryset(self):
+        qs = Producto.objects.all()
+        if self.request.user.is_authenticated and self.request.user.rol == Usuario.Rol.CLIENTE:
+            return qs.filter(activo=True)
+        return qs
+
     def get_serializer_class(self):
-        if self.request.user.is_authenticated and self.request.user.rol == Usuario.Rol.ADMIN:
-            return ProductoAdminSerializer
+        if self.request.user.is_authenticated:
+            if self.request.user.rol == Usuario.Rol.ADMIN:
+                return ProductoAdminSerializer
+            if self.request.user.rol == Usuario.Rol.CLIENTE:
+                return ProductoClienteSerializer
         return ProductoTrabajadorSerializer
 
     @action(detail=True, methods=["get"])
