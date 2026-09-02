@@ -19,9 +19,22 @@ class PaqueteSerializer(serializers.ModelSerializer):
 
 
 class ProductoAdminSerializer(serializers.ModelSerializer):
+    stock_bajo = serializers.BooleanField(read_only=True)
+    valor_inventario = serializers.DecimalField(max_digits=14, decimal_places=2, read_only=True)
+
     class Meta:
         model = Producto
-        fields = ["id", "nombre", "descripcion", "precio_unitario", "stock_actual", "activo"]
+        fields = [
+            "id",
+            "nombre",
+            "descripcion",
+            "precio_unitario",
+            "stock_actual",
+            "stock_minimo",
+            "activo",
+            "stock_bajo",
+            "valor_inventario",
+        ]
         read_only_fields = ["id", "stock_actual"]
 
 

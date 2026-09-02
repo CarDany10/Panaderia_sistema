@@ -3,6 +3,7 @@ from decimal import Decimal
 from django.conf import settings
 from django.core.validators import MinValueValidator
 from django.db import models
+from django.db.models import Sum
 
 from apps.materia_prima.models import MateriaPrima, MovimientoInventarioMateriaPrima
 
@@ -14,6 +15,9 @@ class Producto(models.Model):
     # Solo cambia a través de movimientos (producción/venta/merma/ajuste), igual que
     # MateriaPrima.stock_actual: nunca se edita directamente.
     stock_actual = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0"))
+    # Igual que en MateriaPrima (sección 13): umbral configurable por el Admin para
+    # la alerta de "productos con poco inventario" del dashboard (sección 26).
+    stock_minimo = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0"))
     activo = models.BooleanField(default=True)
     creado_en = models.DateTimeField(auto_now_add=True)
 
@@ -22,6 +26,27 @@ class Producto(models.Model):
 
     def __str__(self):
         return self.nombre
+
+    @property
+    def stock_bajo(self):
+        return self.stock_actual < self.stock_minimo
+
+    @property
+    def costo_promedio_ponderado(self):
+        """Promedio ponderado del costo real de todas las producciones de este
+        producto (método de costeo por promedio ponderado, no un número inventado):
+        suma de costo_total de cada producción ÷ suma de cantidad_producida."""
+        agregado = self.producciones.aggregate(costo=Sum("costo_total"), cantidad=Sum("cantidad_producida"))
+        if not agregado["cantidad"]:
+            return None
+        return agregado["costo"] / agregado["cantidad"]
+
+    @property
+    def valor_inventario(self):
+        costo = self.costo_promedio_ponderado
+        if costo is None:
+            return Decimal("0")
+        return self.stock_actual * costo
 
 
 class Paquete(models.Model):

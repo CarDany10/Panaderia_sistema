@@ -38,6 +38,7 @@ INSTALLED_APPS = [
     "apps.calendario",
     "apps.notificaciones",
     "apps.historial",
+    "apps.dashboard",
 ]
 
 MIDDLEWARE = [
