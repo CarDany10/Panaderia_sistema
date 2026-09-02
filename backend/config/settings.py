@@ -142,3 +142,11 @@ CORS_ALLOW_CREDENTIALS = True
 SESSION_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
 SECURE_SSL_REDIRECT = config("SECURE_SSL_REDIRECT", default=not DEBUG, cast=bool)
+
+# --- Google Calendar ---
+# Credenciales de una cuenta de servicio (JSON completo, no una ruta de archivo)
+# y el ID del calendario compartido con esa cuenta de servicio. Si están vacías,
+# el sistema sigue funcionando: los eventos se guardan localmente sin sincronizar
+# con Google hasta que el administrador conecte la integración.
+GOOGLE_CALENDAR_CREDENTIALS_JSON = config("GOOGLE_CALENDAR_CREDENTIALS_JSON", default="")
+GOOGLE_CALENDAR_ID = config("GOOGLE_CALENDAR_ID", default="")

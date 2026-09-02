@@ -22,6 +22,7 @@ urlpatterns = [
     path("api/v1/produccion/", include("apps.produccion.urls")),
     path("api/v1/ventas/", include("apps.ventas.urls")),
     path("api/v1/pedidos/", include("apps.pedidos.urls")),
-    # Los endpoints de los demás módulos (calendario, notificaciones, historial) se
-    # agregan a partir de Fase 11 en adelante.
+    path("api/v1/calendario/", include("apps.calendario.urls")),
+    # Los endpoints de los demás módulos (notificaciones, historial) se agregan
+    # a partir de Fase 12 en adelante.
 ]

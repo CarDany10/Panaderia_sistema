@@ -5,3 +5,5 @@ django-cors-headers==4.9.0
 psycopg2-binary==2.9.12
 python-decouple==3.8
 argon2-cffi==25.1.0
+google-api-python-client==2.200.0
+google-auth==2.57.0
